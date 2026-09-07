@@ -1,4 +1,4 @@
-# Controller Shape Library　![CI](https://github.com/Yuzuki-Midoshima/Controller-Shape-Library/actions/workflows/ci.yml/badge.svg)
+# Controller Shape Library　![CI](https://github.com/Yuzuki-Midoshima/Controller-Shape-Library/actions/workflows/ci.yml/badge.svg) ![Maya](https://img.shields.io/badge/Autodesk%20Maya-2026-0696D7) ![Python](https://img.shields.io/badge/Python-3.x-3776AB)
 
 
 
