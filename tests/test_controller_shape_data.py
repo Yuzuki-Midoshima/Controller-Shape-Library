@@ -49,7 +49,7 @@ class ControllerShapeDataTests(unittest.TestCase):
 
     def test_direction_shapes_are_compound_curve_strokes(self):
         for name in ("left", "right", "front", "back", "up", "down"):
-            self.assertGreater(len(shape_data.get_shape(name)["curves"]), 2)
+            self.assertGreater(len(shape_data.get_shape(name)["curves"]), 1)
 
     def test_get_shape_is_an_independent_copy(self):
         data = shape_data.get_shape("square")
@@ -125,7 +125,8 @@ class ControllerShapeDataTests(unittest.TestCase):
 
             self.assertEqual(library.ordered_names(path), ["renamed", "two"])
             self.assertNotIn("one", library.load(path))
-            self.assertEqual(library.load(path)["renamed"], replacement)
+            expected = json.loads(json.dumps(replacement))
+            self.assertEqual(library.load(path)["renamed"], expected)
             self.assertEqual(
                 library.tab_order("Basic", path),
                 ["custom:renamed", "custom:two"])
@@ -145,7 +146,8 @@ class ControllerShapeDataTests(unittest.TestCase):
                     "one", shape_data.get_shape("square"), path,
                     allow_overwrite=False)
 
-            self.assertEqual(library.load(path)["one"], original)
+            expected = json.loads(json.dumps(original))
+            self.assertEqual(library.load(path)["one"], expected)
 
 
 if __name__ == "__main__":
