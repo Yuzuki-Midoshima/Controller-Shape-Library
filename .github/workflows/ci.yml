@@ -10,7 +10,9 @@ permissions:
 jobs:
   data-tests:
     name: Data tests (Python 3.11)
-    runs-on: ubuntu-latest
+    # Maya 2026 is primarily validated on Windows, and PySide6 can load there
+    # without Linux display-system packages such as libEGL.
+    runs-on: windows-latest
 
     steps:
       - name: Check out repository
