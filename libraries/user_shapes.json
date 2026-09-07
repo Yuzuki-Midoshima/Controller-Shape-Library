@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "shapes": {},
+  "order": [],
+  "tab_orders": {},
+  "hidden": {},
+  "categories": [
+    {
+      "key": "Basic",
+      "label": "基本"
+    },
+    {
+      "key": "Solid",
+      "label": "立体"
+    },
+    {
+      "key": "Arrow",
+      "label": "矢印"
+    },
+    {
+      "key": "Direction",
+      "label": "文字"
+    },
+    {
+      "key": "Panel",
+      "label": "パネル"
+    }
+  ],
+  "assignments": {}
+}
