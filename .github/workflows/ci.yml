@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install test dependencies
+        run: python -m pip install PySide6
+
       - name: Check Python syntax
         run: python -m compileall -q controller_shape_library launch_controller_shape_library.py
 
