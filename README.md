@@ -1,4 +1,6 @@
-# Controller Shape Library
+# Controller Shape Library　![CI](https://github.com/Yuzuki-Midoshima/Controller-Shape-Library/actions/workflows/ci.yml/badge.svg)
+
+
 
 Autodesk Maya向けの **Controller Shape作成・管理ツール**です。
 
@@ -18,6 +20,7 @@ Controller Shapeを視覚的に選択して生成できるほか、
 
 また、Controller Shape Library単体で使用するだけでなく、
 **他のリギングツールを構成する機能のひとつとして再利用できること**を意識して設計しています。
+
 
 ---
 
