@@ -66,7 +66,7 @@ def _circle_four_arrow():
     return {"label": "Circle Four Arrow", "category": "Arrow", "curves": curves}
 
 
-# Exact CV values used by FK-Builder's mox_rot90 / mox_rot180 presets.
+# Existing FK rotation presets; retained exactly for visual compatibility.
 FK_ROTATION_90 = [
     (-1.0,0.0,0.0),(-1.0,0.0,0.0),(-.87617,0.0,0.0),
     (-.833322,0.0,.250229),(-.705841,0.0,.487587),

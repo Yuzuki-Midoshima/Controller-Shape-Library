@@ -1,0 +1,33 @@
+# Maya 2026 Manual Test Checklist
+
+- [ ] UI起動
+- [ ] 全Presetサムネイル表示
+- [ ] 全71 Preset生成
+- [ ] Search
+- [ ] Preset並び替えと再起動後の保持
+- [ ] Text Controller
+- [ ] 日本語Text
+- [ ] 数字
+- [ ] 記号
+- [ ] Shape Combine
+- [ ] Color
+- [ ] Position Snap
+- [ ] Rotation Snap
+- [ ] ZERO Group
+- [ ] OFFSET Group
+- [ ] ZERO prefix
+- [ ] ZERO suffix
+- [ ] OFFSET prefix
+- [ ] OFFSET suffix
+- [ ] Custom Shape保存
+- [ ] Custom Shape上書き
+- [ ] Custom Shape削除
+- [ ] Category変更
+- [ ] Tab追加
+- [ ] Tab名前変更
+- [ ] Tab並び替え
+- [ ] Tab削除
+- [ ] Undo
+- [ ] Redo
+- [ ] `user_shapes.json`再読み込み
+- [ ] Maya再起動後もLibrary維持

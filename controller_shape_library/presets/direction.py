@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..core.text_shape import outline_data
+
 
 GLYPHS = {
     "A": [[(0,0),(0.5,1),(1,0)], [(0.22,.45),(.78,.45)]],
@@ -77,10 +79,13 @@ def _word_curves(word, start_x):
 
 
 def _direction(word, arrow_left=False):
-    width = _word_width(word)
-    text_start = -width * .5
-    curves = _word_curves(word, text_start)
-    return {"label": word, "category": "Direction", "curves": curves}
+    # Use exactly the same font-outline path as the free-form text creator so
+    # built-in words and user-entered words have matching typography.
+    curves = outline_data(word)["curves"]
+    # Text strokes need Maya top-view's 180-degree Y correction. Keep this
+    # metadata out of the geometry so previews remain naturally readable.
+    return {"label": word, "category": "Direction", "curves": curves,
+            "apply_orientation": True}
 
 
 SHAPES = {

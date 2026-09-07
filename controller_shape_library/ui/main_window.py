@@ -18,6 +18,20 @@ from .color_dialog import ColorPreviewDialog
 SHAPE_MIME = "application/x-controller-shape-items"
 
 
+class TextControllerEdit(QtWidgets.QPlainTextEdit):
+    """Multiline text input whose plain Enter action creates a controller."""
+
+    createRequested = QtCore.Signal()
+
+    def keyPressEvent(self, event):
+        enter_keys = (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter)
+        if event.key() in enter_keys and event.modifiers() == QtCore.Qt.NoModifier:
+            self.createRequested.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
 class ShapeSourceList(QtWidgets.QListWidget):
     def startDrag(self, supported_actions):
         item_ids = [item.data(QtCore.Qt.UserRole + 2)
@@ -106,7 +120,7 @@ def maya_main_window():
     return wrapInstance(int(pointer), QtWidgets.QWidget) if pointer else None
 
 
-def shape_icon(data, apply_orientation=False):
+def shape_icon(data, apply_orientation=False, flip_z=False):
     """Render a warm-yellow preview using a lightweight 3D projection."""
     pixmap = QtGui.QPixmap(72, 72)
     pixmap.fill(QtGui.QColor("#303030"))
@@ -115,12 +129,17 @@ def shape_icon(data, apply_orientation=False):
     painter.setPen(QtGui.QPen(QtGui.QColor("#f0c84b"), 1.5))
 
     def oriented(point):
+        x, y, z = point
         if apply_orientation:
-            # Serialized Maya controller CVs use the opposite horizontal
-            # convention from the library preview. Only X is mirrored here;
-            # flipping Z as well rotates text by 180 degrees.
-            return (-point[0], point[1], point[2])
-        return point
+            # Maya's top view and the 2D Qt preview use opposite horizontal
+            # conventions for text. Mirror X only; changing Z would turn the
+            # glyphs upside down in the preset panel.
+            x = -x
+        if flip_z:
+            # Serialized text CVs have already received the creation-time
+            # rotation, so their thumbnail needs the vertical half only.
+            z = -z
+        return (x, y, z)
 
     points = [oriented(p) for curve in data["curves"]
               for p in curve["points"]]
@@ -142,6 +161,17 @@ def shape_icon(data, apply_orientation=False):
             painter.drawPath(path)
     painter.end()
     return QtGui.QIcon(pixmap)
+
+
+def custom_preview_options(data):
+    """Return preview transforms without leaking them into created geometry."""
+    legacy_x = bool(data.get("preview_flip_x", False))
+    current_record = data.get("apply_orientation") is False
+    return {
+        "apply_orientation": legacy_x and not current_record,
+        "flip_z": bool(data.get("preview_flip_z", False))
+                  or (legacy_x and current_record),
+    }
 
 
 class MainWindow(QtWidgets.QDialog):
@@ -224,11 +254,17 @@ class MainWindow(QtWidgets.QDialog):
         text_layout = QtWidgets.QHBoxLayout(text_row)
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(6)
-        self.text_edit = QtWidgets.QLineEdit()
+        self.text_edit = TextControllerEdit()
         self.text_edit.setPlaceholderText("任意の文字を入力")
+        self.text_edit.setToolTip("Enter: 作成 / Shift+Enter: 改行")
+        self.text_edit.setMinimumWidth(0)
+        self.text_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+        self.text_edit.setFixedHeight(
+            self.text_edit.fontMetrics().lineSpacing() * 3 + 12)
         text_button = QtWidgets.QPushButton("文字を作成")
         text_button.clicked.connect(self._create_text)
-        self.text_edit.returnPressed.connect(self._create_text)
+        self.text_edit.createRequested.connect(self._create_text)
         text_layout.addWidget(QtWidgets.QLabel("文字"))
         text_layout.addWidget(self.text_edit, 1)
         text_layout.addWidget(text_button)
@@ -266,7 +302,10 @@ class MainWindow(QtWidgets.QDialog):
             items = [(key, data) for key, data in SHAPES.items()
                      if data.get("category") == category]
             for key, data in items:
-                item = QtWidgets.QListWidgetItem(shape_icon(data), data.get("label", key))
+                item = QtWidgets.QListWidgetItem(
+                    shape_icon(data, apply_orientation=bool(
+                        data.get("apply_orientation", False))),
+                    data.get("label", key))
                 item.setData(QtCore.Qt.UserRole, key)
                 item.setData(QtCore.Qt.UserRole + 1, False)
                 item.setData(QtCore.Qt.UserRole + 2, "builtin:" + key)
@@ -281,7 +320,7 @@ class MainWindow(QtWidgets.QDialog):
         quick_actions.setSpacing(6)
         combine_button = QtWidgets.QPushButton("シェイプ結合")
         combine_button.setToolTip(
-            "2つ以上を選択し、最後に選択したControllerへShapeを統合します")
+            "編集タブの結合設定を使って、選択したControllerを結合します")
         combine_button.clicked.connect(self._combine_selected)
         color_button = QtWidgets.QPushButton("カラー…")
         color_button.setToolTip("次に作成するControllerの色を指定します")
@@ -309,6 +348,37 @@ class MainWindow(QtWidgets.QDialog):
         snap_layout.addWidget(hint)
         snap_layout.addWidget(snap_button)
         layout.addWidget(snap_group)
+
+        combine_group = QtWidgets.QGroupBox("シェイプ結合")
+        combine_layout = QtWidgets.QVBoxLayout(combine_group)
+        combine_layout.addWidget(QtWidgets.QLabel(
+            "2つ以上のControllerを選択し、結合先と結合後の名前を指定します"))
+
+        target_row = QtWidgets.QHBoxLayout()
+        self.combine_target_combo = QtWidgets.QComboBox()
+        refresh_targets = QtWidgets.QPushButton("選択を更新")
+        refresh_targets.clicked.connect(self._refresh_combine_targets)
+        target_row.addWidget(QtWidgets.QLabel("結合先"))
+        target_row.addWidget(self.combine_target_combo, 1)
+        target_row.addWidget(refresh_targets)
+        combine_layout.addLayout(target_row)
+
+        name_row = QtWidgets.QHBoxLayout()
+        self.combine_name_mode = QtWidgets.QComboBox()
+        self.combine_name_mode.addItem("通常（controller）", "default")
+        self.combine_name_mode.addItem("結合先の名前", "target")
+        self.combine_name_mode.addItem("新規", "custom")
+        name_row.addWidget(QtWidgets.QLabel("名前"))
+        name_row.addWidget(self.combine_name_mode)
+        name_row.addWidget(QtWidgets.QLabel(
+            "「新規」は結合時に名前を入力します"), 1)
+        combine_layout.addLayout(name_row)
+
+        combine_button = QtWidgets.QPushButton("シェイプ結合")
+        combine_button.setMinimumHeight(30)
+        combine_button.clicked.connect(self._combine_selected)
+        combine_layout.addWidget(combine_button)
+        layout.addWidget(combine_group)
 
         group_box = QtWidgets.QGroupBox("グループ作成")
         group_layout = QtWidgets.QVBoxLayout(group_box)
@@ -376,12 +446,15 @@ class MainWindow(QtWidgets.QDialog):
         self.library_category_combo = QtWidgets.QComboBox()
         for key in self._shape_categories:
             self.library_category_combo.addItem(self._category_labels[key], key)
-        save_button = QtWidgets.QPushButton("保存／上書き")
-        save_button.clicked.connect(self._save_library_shape)
+        save_button = QtWidgets.QPushButton("新規保存")
+        save_button.clicked.connect(self._save_new_library_shape)
+        overwrite_button = QtWidgets.QPushButton("選択項目へ上書き")
+        overwrite_button.clicked.connect(self._overwrite_library_shape)
         save_layout.addWidget(self.library_name_edit, 1)
         save_layout.addWidget(QtWidgets.QLabel("登録先タブ"))
         save_layout.addWidget(self.library_category_combo)
-        save_layout.addWidget(save_button)
+        save_layout.addWidget(overwrite_button, 1)
+        save_layout.addWidget(save_button, 1)
         register_layout.addLayout(save_layout)
         buttons = QtWidgets.QHBoxLayout()
         refresh_button = QtWidgets.QPushButton("更新")
@@ -533,7 +606,7 @@ class MainWindow(QtWidgets.QDialog):
         self._run(create)
 
     def _create_text(self):
-        text = self.text_edit.text()
+        text = self.text_edit.toPlainText()
         def create():
             controller = api.create_text_controller(
                 text=text,
@@ -552,12 +625,45 @@ class MainWindow(QtWidgets.QDialog):
             self._run(lambda: (_ for _ in ()).throw(ValueError(
                 "統合するControllerを2つ以上選択してください")))
             return
-        target = selected[-1]
+        previous_target = self.combine_target_combo.currentData()
+        self._refresh_combine_targets()
+        target = (previous_target if previous_target in selected
+                  else self.combine_target_combo.currentData())
+        mode = self.combine_name_mode.currentData()
+        new_name = ""
+        if mode == "custom":
+            new_name, accepted = QtWidgets.QInputDialog.getText(
+                self, "結合後の名前", "新しいController名",
+                QtWidgets.QLineEdit.Normal, "controller")
+            new_name = new_name.strip()
+            if not accepted:
+                return
+            if not new_name:
+                self._run(lambda: (_ for _ in ()).throw(ValueError(
+                    "結合後の名前を入力してください")))
+                return
+        result_name = ("controller" if mode == "default" else
+                       new_name if mode == "custom" else None)
         result = self._run(lambda: api.combine_controllers(
-            selected, target=target, delete_sources=True))
+            selected, target=target, delete_sources=True, name=result_name))
         if result:
             cmds.select(result, replace=True)
         QtCore.QTimer.singleShot(0, self._restore_viewport_focus)
+
+    def _refresh_combine_targets(self):
+        selected = self._selection()
+        current = self.combine_target_combo.currentData()
+        self.combine_target_combo.clear()
+        for index, node in enumerate(selected):
+            label = node.rsplit("|", 1)[-1]
+            if index == len(selected) - 1:
+                label += "（最後に選択）"
+            self.combine_target_combo.addItem(label, node)
+        target_index = self.combine_target_combo.findData(current)
+        if target_index < 0 and selected:
+            target_index = len(selected) - 1
+        if target_index >= 0:
+            self.combine_target_combo.setCurrentIndex(target_index)
 
     @staticmethod
     def _model_panel():
@@ -713,7 +819,8 @@ class MainWindow(QtWidgets.QDialog):
         self._updating_shapes = True
         for name in api.library_shapes(self._library_path):
             item = QtWidgets.QListWidgetItem(
-                shape_icon(shapes[name], apply_orientation=True), name)
+                shape_icon(shapes[name], **custom_preview_options(shapes[name])),
+                name)
             item.setData(QtCore.Qt.UserRole, name)
             item.setToolTip("{} を作成".format(name))
             self._library_list.addItem(item)
@@ -737,8 +844,11 @@ class MainWindow(QtWidgets.QDialog):
             for item_id, key, data, custom in entries:
                 if item_id in hidden:
                     continue
+                preview_options = (custom_preview_options(data) if custom else
+                                   {"apply_orientation": bool(data.get(
+                                       "apply_orientation", False))})
                 preset = QtWidgets.QListWidgetItem(
-                    shape_icon(data, apply_orientation=custom),
+                    shape_icon(data, **preview_options),
                     data.get("label", key))
                 preset.setData(QtCore.Qt.UserRole, key)
                 preset.setData(QtCore.Qt.UserRole + 1, custom)
@@ -833,14 +943,16 @@ class MainWindow(QtWidgets.QDialog):
             category = api.library_item_category(
                 item_id, data.get("category"), self._library_path)
             entries.append((item_id, data.get("label", key),
-                            shape_icon(data), category))
+                            shape_icon(data, apply_orientation=bool(
+                                data.get("apply_orientation", False))), category))
         for name in api.library_shapes(self._library_path):
             data = shapes[name]
             item_id = "custom:" + name
             category = api.library_item_category(
                 item_id, data.get("category", "Panel"), self._library_path)
-            entries.append((item_id, name,
-                            shape_icon(data, apply_orientation=True), category))
+            entries.append((item_id, name, shape_icon(
+                data, **custom_preview_options(data)),
+                category))
         picker = ShapePicker(
             entries, api.library_categories(self._library_path), self)
         picker.itemsChosen.connect(self._picker_items_chosen)
@@ -946,6 +1058,9 @@ class MainWindow(QtWidgets.QDialog):
                 self._refresh_library()
 
     def _outer_tab_changed(self, index):
+        if index == 1:
+            self._refresh_combine_targets()
+            return
         if index != 2:
             return
         selected = self._selection()
@@ -1166,19 +1281,51 @@ class MainWindow(QtWidgets.QDialog):
             self._refresh_library()
             self._select_library_name(name)
 
-    def _save_library_shape(self):
+    def _library_save_source_and_name(self, overwrite=False):
         selected = self._selection()
         if not selected:
             self._run(lambda: (_ for _ in ()).throw(ValueError("登録するControllerを選択してください")))
-            return
+            return None
         name = self.library_name_edit.text().strip()
         if not name:
-            name = selected[0].rsplit("|", 1)[-1].rsplit(":", 1)[-1]
+            if overwrite:
+                library_items = self._library_list.selectedItems()
+                name = (library_items[0].data(QtCore.Qt.UserRole)
+                        if len(library_items) == 1 else "")
+            else:
+                name = selected[0].rsplit("|", 1)[-1].rsplit(":", 1)[-1]
             self.library_name_edit.setText(name)
+        return selected[0], name
+
+    def _save_new_library_shape(self):
+        values = self._library_save_source_and_name()
+        if not values:
+            return
+        source, name = values
         self._record_library_state()
         if self._run(lambda: api.save_to_library(
-                selected[0], name, self._library_path,
-                self.library_category_combo.currentData())):
+                source, name, self._library_path,
+                self.library_category_combo.currentData(),
+                allow_overwrite=False)):
+            self._refresh_library()
+            self._select_library_name(name)
+
+    def _overwrite_library_shape(self):
+        library_items = self._library_list.selectedItems()
+        if len(library_items) != 1:
+            self._run(lambda: (_ for _ in ()).throw(ValueError(
+                "上書きするライブラリ項目を1つ選択してください")))
+            return
+        values = self._library_save_source_and_name(overwrite=True)
+        if not values:
+            return
+        source, name = values
+        replace_name = library_items[0].data(QtCore.Qt.UserRole)
+        self._record_library_state()
+        if self._run(lambda: api.save_to_library(
+                source, name, self._library_path,
+                self.library_category_combo.currentData(), replace_name,
+                allow_overwrite=True)):
             self._refresh_library()
             self._select_library_name(name)
 

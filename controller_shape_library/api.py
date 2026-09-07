@@ -26,7 +26,8 @@ def create_controller(shape="circle", name="controller_CTRL", size=1.0, color=No
     """Create a controller and optionally snap its transform to *target*."""
     from .core.creator import create
     with _undo_chunk("Create Controller"):
-        controller = create(shape=shape, name=name, size=size, color=color, parent=parent)
+        controller = create(shape=shape, name=name, size=size, color=color,
+                            parent=parent)
         if target:
             from .core.snap import snap_to as _snap
             _snap(controller, target)
@@ -41,18 +42,23 @@ def create_text_controller(text, name="text_CTRL", size=1.0, color=None,
     with _undo_chunk("Create Text Controller"):
         controller = create_from_data(
             outline_data(text, font_family), name=name, size=size,
-            color=color, parent=parent)
+            color=color, parent=parent, apply_orientation=True,
+            preview_flip_x=True)
         if target:
             from .core.snap import snap_to as _snap
             _snap(controller, target)
         return controller
 
 
-def combine_controllers(controllers, target=None, delete_sources=True):
+def combine_controllers(controllers, target=None, delete_sources=True, name=None):
     """Combine curve shapes under one transform, preserving world appearance."""
     from .core.combine import combine
     with _undo_chunk("Combine Controller Shapes"):
-        return combine(controllers, target=target, delete_sources=delete_sources)
+        result = combine(controllers, target=target, delete_sources=delete_sources)
+        if name:
+            from maya import cmds
+            result = cmds.rename(result, name)
+        return result
 
 
 def replace_shape(target, shape="circle", size=1.0, color=None):
@@ -163,14 +169,25 @@ def library_shapes(path=None):
     return ordered_names(path)
 
 
-def save_to_library(source, name, path=None, category="Panel"):
+def save_to_library(source, name, path=None, category="Panel", replace_name=None,
+                    allow_overwrite=True):
     """Add or replace one named shape in libraries/user_shapes.json."""
     from .core.library import save_shape
     from .core.shape_utils import serialize
     data = serialize(source)
     data["category"] = category
     data["label"] = name
-    return save_shape(name, data, path)
+    # Text controllers carry a preview-only horizontal correction. It must
+    # affect the Qt thumbnail, but never the CVs created from this record.
+    from maya import cmds
+    attribute = source + ".controllerShapePreviewFlipX"
+    text_preview = bool(
+        cmds.getAttr(attribute)) if cmds.objExists(attribute) else False
+    data["preview_flip_x"] = False
+    data["preview_flip_z"] = text_preview
+    data["apply_orientation"] = False
+    return save_shape(name, data, path, replace_name=replace_name,
+                      allow_overwrite=allow_overwrite)
 
 
 def create_from_library(name, controller_name="controller", size=1.0, color=None,
@@ -182,8 +199,14 @@ def create_from_library(name, controller_name="controller", size=1.0, color=None
     if name not in shapes:
         raise ValueError("Library shape does not exist: {}".format(name))
     with _undo_chunk("Create Library Controller"):
-        return create_from_data(shapes[name], name=controller_name,
-                                size=size, color=color)
+        return create_from_data(
+            shapes[name], name=controller_name, size=size, color=color,
+            # Library CVs are serialized directly from Maya. This is also the
+            # correct behavior for records written by older releases; their
+            # preview compatibility flag must never affect created geometry.
+            apply_orientation=False,
+            preview_flip_x=bool(shapes[name].get("preview_flip_x", False)
+                                or shapes[name].get("preview_flip_z", False)))
 
 
 def remove_from_library(name, path=None):

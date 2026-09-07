@@ -68,7 +68,7 @@ def ordered_names(path=None):
     return list(_payload(path)["order"])
 
 
-def save_shape(name, data, path=None):
+def save_shape(name, data, path=None, replace_name=None, allow_overwrite=True):
     name = str(name).strip()
     if not name:
         raise ValueError("Library shape name must not be empty")
@@ -76,7 +76,33 @@ def save_shape(name, data, path=None):
     library_path = Path(path) if path else LIBRARY_PATH
     payload = _payload(library_path)
     shapes = payload["shapes"]
-    is_new = name not in shapes
+    if not allow_overwrite and name in shapes:
+        raise ValueError("Library shape already exists: {}".format(name))
+    replace_name = str(replace_name).strip() if replace_name is not None else name
+    renamed = False
+    if replace_name and replace_name != name and replace_name in shapes:
+        # Renaming an existing entry is still an overwrite.  Keep its position
+        # and update every persisted custom-item reference instead of leaving
+        # the old entry behind and appending a new one.
+        old_id = "custom:" + replace_name
+        new_id = "custom:" + name
+        del shapes[replace_name]
+        order = payload["order"]
+        payload["order"] = [
+            name if item == replace_name else item
+            for item in order if item != name
+        ]
+        for values in payload["tab_orders"].values():
+            values[:] = [new_id if item == old_id else item
+                         for item in values if item != new_id]
+        for values in payload["hidden"].values():
+            values[:] = [new_id if item == old_id else item
+                         for item in values if item != new_id]
+        assignments = payload["assignments"]
+        if old_id in assignments:
+            assignments[new_id] = assignments.pop(old_id)
+        renamed = True
+    is_new = name not in shapes and not renamed
     shapes[name] = data
     if is_new:
         payload["order"].append(name)

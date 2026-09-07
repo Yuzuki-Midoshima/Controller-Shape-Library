@@ -7,6 +7,7 @@ maya.standalone.initialize(name="python")
 from maya import cmds
 
 from controller_shape_library import api
+from controller_shape_library.core import shape_data, shape_utils, text_shape
 
 
 class ControllerShapeMayaTests(unittest.TestCase):
@@ -19,6 +20,20 @@ class ControllerShapeMayaTests(unittest.TestCase):
         self.assertEqual(len(cmds.listRelatives(controller, shapes=True)), 3)
         api.scale_shape(controller, .5)
         self.assertEqual(cmds.getAttr(controller + ".scaleX"), 1.0)
+
+    def test_created_controller_keeps_asymmetric_preset_orientation(self):
+        controller = api.create_controller("pin", "pin_CTRL")
+        expected = shape_data.get_shape("pin")["curves"][0]["points"]
+        actual = shape_utils.serialize(controller)["curves"][0]["points"]
+        self.assertEqual(len(actual), len(expected))
+        for actual_point, expected_point in zip(actual, expected):
+            for actual_axis, expected_axis in zip(actual_point, expected_point):
+                self.assertAlmostEqual(actual_axis, expected_axis)
+
+    def test_direction_presets_use_the_free_form_text_font(self):
+        for name in ("left", "right", "front", "back", "up", "down"):
+            expected = text_shape.outline_data(name.upper())["curves"]
+            self.assertEqual(shape_data.get_shape(name)["curves"], expected)
 
     def test_shape_copy_replace_and_grouping(self):
         source = api.create_controller("square", "source_CTRL")
@@ -63,6 +78,46 @@ class ControllerShapeMayaTests(unittest.TestCase):
     def test_custom_zero_suffix(self):
         target = api.create_controller("circle", "hand_CTRL")
         self.assertEqual(api.create_zero_group(target, "ZRO"), "hand_ZRO")
+
+    def test_all_added_presets_create_only_nurbs_curves(self):
+        names = (
+            "hemisphere", "pyramid", "capsule", "rotate_360", "rotate_cw",
+            "rotate_ccw", "rotate_xyz", "pole_vector", "root", "ik", "fk",
+            "settings", "world", "eye", "foot", "hand",
+        )
+        for name in names:
+            controller = api.create_controller(name, name + "_CTRL")
+            shapes = cmds.listRelatives(controller, shapes=True) or []
+            self.assertTrue(shapes, name)
+            self.assertTrue(all(cmds.nodeType(shape) == "nurbsCurve"
+                                for shape in shapes), name)
+
+    def test_new_text_controller_saves_without_a_second_correction(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        controller = api.create_text_controller("HIGH", "HIGH_CTRL")
+        self.assertTrue(cmds.getAttr(
+            controller + ".controllerShapePreviewFlipX"))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "shapes.json"
+            api.save_to_library(controller, "HIGH", path, "Direction")
+            record = json.loads(path.read_text(encoding="utf-8"))["shapes"]["HIGH"]
+            self.assertFalse(record["preview_flip_x"])
+            self.assertTrue(record["preview_flip_z"])
+            self.assertFalse(record["apply_orientation"])
+            # New library records retain Maya-space CVs, so recreating must
+            # preserve the selected controller's orientation exactly.
+            recreated = api.create_from_library(
+                "HIGH", "HIGH_COPY_CTRL", path=path)
+            original_points = cmds.xform(
+                cmds.listRelatives(controller, shapes=True, fullPath=True)[0]
+                + ".cv[*]", query=True, objectSpace=True, translation=True)
+            recreated_points = cmds.xform(
+                cmds.listRelatives(recreated, shapes=True, fullPath=True)[0]
+                + ".cv[*]", query=True, objectSpace=True, translation=True)
+            self.assertEqual(original_points, recreated_points)
 
 
 if __name__ == "__main__":

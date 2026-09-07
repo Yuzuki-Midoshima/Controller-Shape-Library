@@ -12,7 +12,12 @@ def outline_data(text, font_family="Arial"):
     font = QtGui.QFont(font_family)
     font.setPixelSize(100)
     path = QtGui.QPainterPath()
-    path.addText(0, 0, font, str(text))
+    # QPainterPath.addText does not lay out newline characters. Add each line
+    # at its own baseline so multiline controller labels preserve line breaks.
+    metrics = QtGui.QFontMetricsF(font)
+    for line_index, line in enumerate(str(text).split("\n")):
+        if line:
+            path.addText(0, line_index * metrics.lineSpacing(), font, line)
     polygons = path.toSubpathPolygons()
     if not polygons:
         raise ValueError("The selected font cannot render this text")

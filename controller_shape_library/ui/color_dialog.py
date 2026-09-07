@@ -44,6 +44,7 @@ class ColorPreviewDialog(QtWidgets.QDialog):
         self.picker.setWindowFlags(QtCore.Qt.Widget)
         self.picker.setOption(QtWidgets.QColorDialog.DontUseNativeDialog, True)
         self.picker.setOption(QtWidgets.QColorDialog.NoButtons, True)
+        self._editing_custom_index = None
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.addWidget(self.picker, 1)
@@ -56,8 +57,91 @@ class ColorPreviewDialog(QtWidgets.QDialog):
         layout.addLayout(buttons)
         apply_button.clicked.connect(self.accept)
         cancel_button.clicked.connect(self.reject)
-        self.picker.currentColorChanged.connect(self.colorPreviewed)
+        self.picker.currentColorChanged.connect(self._on_picker_color_changed)
         self.finished.connect(self._restore_palette)
+        self.picker.show()
+        self._configure_custom_colors()
+
+    def _configure_custom_colors(self):
+        self._color_wells = [
+            widget for widget in self.picker.findChildren(QtWidgets.QWidget)
+            if widget.metaObject().className().endswith("QWellArray")
+        ]
+        self._custom_well = (
+            max(self._color_wells, key=lambda widget: widget.mapToGlobal(
+                widget.rect().topLeft()).y()) if self._color_wells else None
+        )
+        for well in self._color_wells:
+            well.installEventFilter(self)
+        for button in self.picker.findChildren(QtWidgets.QPushButton):
+            if "Add to Custom" in button.text() or "カスタム" in button.text():
+                button.clicked.connect(self._finish_custom_edit)
+
+    def _custom_index_at(self, position):
+        if not self._custom_well or not self._custom_well.rect().contains(position):
+            return None
+        count = QtWidgets.QColorDialog.customCount()
+        columns = 8
+        rows = max(1, (count + columns - 1) // columns)
+        column = min(columns - 1, max(
+            0, position.x() * columns // max(1, self._custom_well.width())))
+        row = min(rows - 1, max(
+            0, position.y() * rows // max(1, self._custom_well.height())))
+        index = column * rows + row
+        return index if index < count else None
+
+    def _show_custom_menu(self, index, global_position):
+        menu = QtWidgets.QMenu(self)
+        edit = menu.addAction("編集")
+        remove = menu.addAction("削除")
+        edit.triggered.connect(lambda: self._edit_custom_color(index))
+        remove.triggered.connect(lambda: self._remove_custom_color(index))
+        menu.popup(global_position)
+
+    def _edit_custom_color(self, index):
+        color = QtWidgets.QColorDialog.customColor(index)
+        if color.isValid():
+            self._editing_custom_index = index
+            self.picker.setCurrentColor(color)
+
+    def _remove_custom_color(self, index):
+        QtWidgets.QColorDialog.setCustomColor(index, QtGui.QColor("white"))
+        if self._editing_custom_index == index:
+            self._editing_custom_index = None
+        if self._custom_well:
+            self._custom_well.update()
+
+    def _finish_custom_edit(self):
+        if self._editing_custom_index is None:
+            return
+        QtWidgets.QColorDialog.setCustomColor(
+            self._editing_custom_index, self.picker.currentColor())
+        self._editing_custom_index = None
+        if self._custom_well:
+            self._custom_well.update()
+
+    def _on_picker_color_changed(self, color):
+        if self._editing_custom_index is not None:
+            QtWidgets.QColorDialog.setCustomColor(
+                self._editing_custom_index, color)
+            if self._custom_well:
+                self._custom_well.update()
+        self.colorPreviewed.emit(color)
+
+    def eventFilter(self, watched, event):
+        if watched is self._custom_well:
+            if (event.type() == QtCore.QEvent.MouseButtonPress
+                    and event.button() == QtCore.Qt.RightButton):
+                index = self._custom_index_at(event.position().toPoint())
+                if index is not None:
+                    self._show_custom_menu(index, event.globalPosition().toPoint())
+                    return True
+            if event.type() == QtCore.QEvent.ContextMenu:
+                index = self._custom_index_at(event.pos())
+                if index is not None:
+                    self._show_custom_menu(index, event.globalPos())
+                    return True
+        return super().eventFilter(watched, event)
 
     def place_next_to(self, window):
         screen = window.screen() or QtWidgets.QApplication.primaryScreen()

@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,22 @@ from controller_shape_library.core import library, naming, shape_data
 
 
 class ControllerShapeDataTests(unittest.TestCase):
+    def test_existing_shape_geometry_is_unchanged(self):
+        fixture = Path(__file__).with_name("existing_shape_fingerprints.json")
+        expected = json.loads(fixture.read_text(encoding="utf-8"))
+        self.assertTrue(expected)
+        for name, digest in expected.items():
+            # Direction words intentionally follow the active Maya/Qt Arial
+            # outline generator and are no longer static hand-drawn geometry.
+            if name in {"left", "right", "front", "back", "up", "down"}:
+                continue
+            self.assertIn(name, shape_data.SHAPES)
+            data = shape_data.SHAPES[name]
+            stable = {"category": data.get("category"), "curves": data["curves"]}
+            raw = json.dumps(stable, sort_keys=True, separators=(",", ":"))
+            actual = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            self.assertEqual(actual, digest, name)
+
     def test_all_required_shapes_exist_and_validate(self):
         required = {
             "circle", "circle_low", "triangle", "square", "cross", "fat_cross",
@@ -18,6 +35,17 @@ class ControllerShapeDataTests(unittest.TestCase):
         self.assertTrue(required.issubset(set(api.available_shapes())))
         for name in required:
             self.assertTrue(shape_data.validate_shape(name, shape_data.get_shape(name)))
+
+    def test_new_shape_set_exists_and_validates(self):
+        added = {
+            "hemisphere", "pyramid", "capsule", "rotate_360", "rotate_cw",
+            "rotate_ccw", "rotate_xyz", "pole_vector", "root", "ik", "fk",
+            "settings", "world", "eye", "foot", "hand",
+        }
+        self.assertTrue(added.issubset(shape_data.SHAPES))
+        for name in added:
+            self.assertTrue(shape_data.validate_shape(
+                name, shape_data.get_shape(name)))
 
     def test_direction_shapes_are_compound_curve_strokes(self):
         for name in ("left", "right", "front", "back", "up", "down"):
@@ -80,6 +108,44 @@ class ControllerShapeDataTests(unittest.TestCase):
             self.assertEqual(library.categories(path)[-2]["key"], key)
             library.remove_category(key, path)
             self.assertNotIn(key, [item["key"] for item in library.categories(path)])
+
+    def test_saving_selected_shape_under_new_name_renames_the_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "user_shapes.json"
+            library.save_shape("one", shape_data.get_shape("circle"), path)
+            library.save_shape("two", shape_data.get_shape("square"), path)
+            library.set_tab_order(
+                "Basic", ["custom:one", "custom:two"], path)
+            library.set_item_hidden("Basic", "custom:one", True, path)
+            library.assign_item("custom:one", "Basic", path)
+
+            replacement = shape_data.get_shape("triangle")
+            library.save_shape(
+                "renamed", replacement, path, replace_name="one")
+
+            self.assertEqual(library.ordered_names(path), ["renamed", "two"])
+            self.assertNotIn("one", library.load(path))
+            self.assertEqual(library.load(path)["renamed"], replacement)
+            self.assertEqual(
+                library.tab_order("Basic", path),
+                ["custom:renamed", "custom:two"])
+            self.assertEqual(
+                library.hidden_items("Basic", path), ["custom:renamed"])
+            self.assertEqual(
+                library.item_category("custom:renamed", None, path), "Basic")
+
+    def test_new_library_save_refuses_an_existing_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "user_shapes.json"
+            original = shape_data.get_shape("circle")
+            library.save_shape("one", original, path)
+
+            with self.assertRaises(ValueError):
+                library.save_shape(
+                    "one", shape_data.get_shape("square"), path,
+                    allow_overwrite=False)
+
+            self.assertEqual(library.load(path)["one"], original)
 
 
 if __name__ == "__main__":

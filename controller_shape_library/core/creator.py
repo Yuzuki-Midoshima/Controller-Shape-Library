@@ -18,7 +18,8 @@ def _curve(curve_data):
 
 
 def create_from_data(data, name="controller_CTRL", size=1.0, color=None,
-                     parent=None, matrix=None, apply_orientation=True):
+                     parent=None, matrix=None, apply_orientation=False,
+                     preview_flip_x=False):
     shape_data.validate_shape(name, data)
     if size <= 0:
         raise ValueError("size must be greater than zero")
@@ -26,9 +27,8 @@ def create_from_data(data, name="controller_CTRL", size=1.0, color=None,
     try:
         for curve_data in data["curves"]:
             scaled = dict(curve_data)
-            # Maya controllers in this toolkit face the opposite Y orientation
-            # from the source/library coordinate convention. Bake the 180-degree
-            # Y correction into CVs so the transform channels remain zeroed.
+            # Legacy library records may request the former 180-degree Y
+            # correction. Current presets already use Maya-space coordinates.
             orientation = (-1.0, 1.0, -1.0) if apply_orientation else (1.0, 1.0, 1.0)
             scaled["points"] = [
                 [point[axis] * orientation[axis] * float(size) for axis in range(3)]
@@ -39,6 +39,12 @@ def create_from_data(data, name="controller_CTRL", size=1.0, color=None,
         if matrix is not None:
             cmds.xform(controller, worldSpace=True, matrix=matrix)
         shape_utils.rename_shapes(controller)
+        if not cmds.attributeQuery(
+                "controllerShapePreviewFlipX", node=controller, exists=True):
+            cmds.addAttr(controller, longName="controllerShapePreviewFlipX",
+                         attributeType="bool", hidden=True)
+        cmds.setAttr(controller + ".controllerShapePreviewFlipX",
+                     bool(preview_flip_x))
         if color is not None:
             from .color import set_color
             set_color(controller, color)
@@ -50,4 +56,7 @@ def create_from_data(data, name="controller_CTRL", size=1.0, color=None,
 
 
 def create(shape="circle", **kwargs):
-    return create_from_data(shape_data.get_shape(shape), **kwargs)
+    data = shape_data.get_shape(shape)
+    kwargs.setdefault("apply_orientation", bool(data.get("apply_orientation", False)))
+    kwargs.setdefault("preview_flip_x", bool(data.get("apply_orientation", False)))
+    return create_from_data(data, **kwargs)
