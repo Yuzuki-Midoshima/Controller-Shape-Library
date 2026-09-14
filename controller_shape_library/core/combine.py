@@ -6,7 +6,6 @@ from maya import cmds
 from maya.api import OpenMaya as om
 
 from . import shape_utils
-from .creator import create_from_data
 
 
 def _shape_in_target_space(shape, target_inverse):
@@ -54,19 +53,27 @@ def combine(controllers, target=None, delete_sources=True):
             continue
         shape_utils.require_editable(source)
         source_shapes = shape_utils.curve_shapes(source)
-        curves = [_shape_in_target_space(shape, target_inverse)
-                  for shape in source_shapes]
-        colors = [_override_state(shape) for shape in source_shapes]
-        if not curves:
+        records = [(_shape_in_target_space(shape, target_inverse),
+                    _override_state(shape)) for shape in source_shapes]
+        if not records:
             continue
-        # These points are already converted from world space into the target's
-        # local space. Do not apply the source-library orientation correction a
-        # second time or the source shape will rotate 180 degrees around Y.
-        temporary = create_from_data(
-            {"curves": curves}, name="combinedShapeTemp#", apply_orientation=False)
-        for shape, color in zip(shape_utils.curve_shapes(temporary), colors):
-            _apply_override(shape, color)
-        shape_utils.parent_shapes(temporary, target)
+        # Build and transfer one curve at a time. A compound temporary transform
+        # caused Maya to invalidate a shape name while its siblings were being
+        # reparented (for example ``combinedShapeTemp_Shape``).
+        for curve, color in records:
+            temporary = cmds.curve(
+                degree=int(curve["degree"]), point=curve["points"])
+            temporary_shape = cmds.listRelatives(
+                temporary, shapes=True, noIntermediate=True,
+                fullPath=True)[0]
+            moved = cmds.parent(
+                temporary_shape, target, shape=True, relative=True) or []
+            if cmds.objExists(temporary):
+                cmds.delete(temporary)
+            if not moved:
+                raise RuntimeError("Failed to transfer a controller shape")
+            moved_shape = cmds.ls(moved[0], long=True)[0]
+            _apply_override(moved_shape, color)
         if delete_sources and cmds.objExists(source):
             cmds.delete(source)
     shape_utils.rename_shapes(target)

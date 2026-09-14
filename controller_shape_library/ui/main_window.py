@@ -365,8 +365,8 @@ class MainWindow(QtWidgets.QDialog):
 
         name_row = QtWidgets.QHBoxLayout()
         self.combine_name_mode = QtWidgets.QComboBox()
-        self.combine_name_mode.addItem("通常（controller）", "default")
         self.combine_name_mode.addItem("結合先の名前", "target")
+        self.combine_name_mode.addItem("通常（controller）", "default")
         self.combine_name_mode.addItem("新規", "custom")
         name_row.addWidget(QtWidgets.QLabel("名前"))
         name_row.addWidget(self.combine_name_mode)

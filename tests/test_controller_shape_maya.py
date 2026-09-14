@@ -75,6 +75,17 @@ class ControllerShapeMayaTests(unittest.TestCase):
         rgb = cmds.getAttr(rgb_shapes[0] + ".overrideColorRGB")[0]
         self.assertAlmostEqual(rgb[2], 0.9)
 
+    def test_combine_accepts_a_compound_controller(self):
+        compound = api.create_controller("sphere", "patapata_anim", color=13)
+        target = api.create_controller("circle", "controller", color=6)
+        source_shape_count = len(cmds.listRelatives(compound, shapes=True) or [])
+        result = api.combine_controllers([compound, target], target=target)
+        shapes = cmds.listRelatives(result, shapes=True, fullPath=True) or []
+        self.assertEqual(len(shapes), source_shape_count + 1)
+        self.assertFalse(cmds.objExists(compound))
+        self.assertTrue(all(cmds.nodeType(shape) == "nurbsCurve"
+                            for shape in shapes))
+
     def test_custom_zero_suffix(self):
         target = api.create_controller("circle", "hand_CTRL")
         self.assertEqual(api.create_zero_group(target, "ZRO"), "hand_ZRO")

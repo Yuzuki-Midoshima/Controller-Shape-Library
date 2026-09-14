@@ -35,7 +35,10 @@ def create_from_data(data, name="controller_CTRL", size=1.0, color=None,
                 for point in curve_data["points"]
             ]
             temporary = _curve(scaled)
-            shape_utils.parent_shapes(temporary, controller)
+            # Renaming after every curve can invalidate names returned by Maya
+            # while a compound controller is still being assembled. Rename the
+            # complete set once below instead.
+            shape_utils.parent_shapes(temporary, controller, rename=False)
         if matrix is not None:
             cmds.xform(controller, worldSpace=True, matrix=matrix)
         shape_utils.rename_shapes(controller)

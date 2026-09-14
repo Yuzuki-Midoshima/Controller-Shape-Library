@@ -50,14 +50,17 @@ def clipboard_data():
     return json.loads(cmds.optionVar(query=CLIPBOARD_OPTION))
 
 
-def parent_shapes(source, target):
+def parent_shapes(source, target, rename=True):
     require_editable(target)
     moved = []
-    for shape in curve_shapes(source, full_path=False):
+    # Keep full DAG paths while moving compound shapes. Short shape names can
+    # become stale or ambiguous as Maya reparents sibling shapes.
+    for shape in curve_shapes(source, full_path=True):
         moved.extend(cmds.parent(shape, target, shape=True, relative=True) or [])
     if cmds.objExists(source):
         cmds.delete(source)
-    rename_shapes(target)
+    if rename:
+        rename_shapes(target)
     return moved
 
 
