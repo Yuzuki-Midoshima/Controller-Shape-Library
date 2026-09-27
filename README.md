@@ -9,14 +9,14 @@ Maya 2026 / Python 3 / PySide6 を対象とし、
 
 Controller Shapeを視覚的に選択して生成できるほか、
 
-* 任意の文字からControllerを作成
+* 任意の文字からコントローラーを作成
 * Shapeの結合
 * カラー設定
 * Position / Rotation Snap
 * ZERO / OFFSET Groupの作成
 * 作成したShapeのLibrary登録
 
-など、Controller作成時に繰り返し発生する操作をまとめています。
+など、コントローラー作成時に繰り返し発生する操作をまとめています。
 
 また、Controller Shape Library単体で使用するだけでなく、
 **他のリギングツールを構成する機能のひとつとして再利用できること**を意識して設計しています。
@@ -38,10 +38,10 @@ Controller Shapeを視覚的に選択して生成できるほか、
 
 # 制作背景
 
-リギング制作では、Controllerを作成するだけでなく、
+リギング制作では、コントローラーを作成するだけでなく、
 
 1. 使用するShapeを探す
-2. Controllerを作成する
+2. コントローラーを作成する
 3. Jointや対象オブジェクトへ位置を合わせる
 4. 用途に応じて色を設定する
 5. ZERO / OFFSET Groupを作成する
@@ -52,12 +52,12 @@ Controller Shapeを視覚的に選択して生成できるほか、
 一つひとつは小さな操作ですが、
 キャラクター全体のリグを構築する中では何度も繰り返すことになります。
 
-また、用途に合うControllerがない場合には、新しくShapeを作成したり、
-過去のMayaシーンから似たControllerを探して再利用したりする必要がありました。
+また、用途に合うコントローラーがない場合には、新しくShapeを作成したり、
+過去のMayaシーンから似たコントローラーを探して再利用したりする必要がありました。
 
 そこで、
 
-> **Controllerを作成するだけではなく、作成・セットアップ・整理・再利用までのワークフローをまとめる**
+> **コントローラーを作成するだけではなく、作成・セットアップ・整理・再利用までのワークフローをまとめる**
 
 ことを目的としてController Shape Libraryを制作しました。
 
@@ -65,14 +65,14 @@ Controller Shapeを視覚的に選択して生成できるほか、
 
 # Workflow
 
-基本的なController作成を、以下の流れで進められるようにしています。
+基本的なコントローラー作成を、以下の流れで進められるようにしています。
 
 ```text
 Shapeを探す / 選択
         ↓
-Controller作成
+コントローラー作成
         ↓
-必要に応じてShape Combine
+必要に応じてシェイプの結合
         ↓
 位置合わせ
         ↓
@@ -85,10 +85,10 @@ ZERO / OFFSET作成
 別のリグ制作で再利用
 ```
 
-![Basic Controller Workflow](docs/images/basic_controller_workflow.gif)
+![Basic Controller Workflow](docs/gifs/basic_controller_workflow.gif)
 
 Shapeを生成する機能だけで終わらせず、
-その前後に発生する操作までまとめることで、Controller作成時の反復作業を減らしています。
+その前後に発生する操作までまとめることで、コントローラー作成時の反復作業を減らしています。
 
 ---
 
@@ -99,7 +99,7 @@ Shapeを生成する機能だけで終わらせず、
 Controller Shapeを一覧から視覚的に確認しながら選択できます。
 
 Shape名だけでは形状を判断しづらいため、
-**実際の形を見ながら用途に合ったControllerを探せるUI**にしています。
+**実際の形を見ながら用途に合ったコントローラーを探せるUI**にしています。
 
 現在は **71種類のプリセット**を収録しており、用途に応じて5つのカテゴリに分類しています。
 
@@ -125,7 +125,7 @@ Shape名だけでは形状を判断しづらいため、
 
 **移動方向や操作方向を直感的に示すDirection Shape。**
 
-![Arrow Shapes](images/presets_arrow.png)
+![Arrow Shapes](docs/images/presets_arrow.png)
 
 ---
 
@@ -156,7 +156,7 @@ Shape名だけでは形状を判断しづらいため、
 
 任意の文字からController Shapeを生成できます。
 
-![Text Controller](docs/images/text_controller.gif)
+![Text Controller](docs/gifs/text_controller.gif)
 
 英字だけでなく、
 
@@ -164,7 +164,7 @@ Shape名だけでは形状を判断しづらいため、
 * 数字
 * 記号
 
-など、使用するフォントで表示可能な文字をControllerとして利用できます。
+など、使用するフォントで表示可能な文字をコントローラーとして利用できます。
 
 例えば、
 
@@ -181,9 +181,9 @@ B
 →
 ```
 
-のように、リグ上で役割を直接示すControllerとして使用できます。
+のように、リグ上で役割を直接示すコントローラーとして使用できます。
 
-生成した文字Controllerも通常のCurve Shapeとして扱えるため、
+生成した文字コントローラーも通常のCurve Shapeとして扱えるため、
 他のShapeとの結合やLibraryへの登録が可能です。
 
 ---
@@ -191,7 +191,7 @@ B
 ## Shape Combine
 
 複数のController Shapeを結合し、
-1つのControllerとしてまとめることができます。
+1つのコントローラーとしてまとめることができます。
 
 ![Shape Combine](docs/gifs/shape_combine.gif)
 
@@ -204,14 +204,14 @@ Panel + Text
 ```
 
 のように、既存ShapeやText Controllerを組み合わせることで、
-用途に合わせたControllerを作成できます。
+用途に合わせたコントローラーを作成できます。
 
 ### 結合後の命名
 
-Shape結合後のController名は、用途に応じて選択できます。
+Shape結合後のコントローラー名は、用途に応じて選択できます。
 
-* **通常（controller）**：他シェイプ同様Controllerを名前として使用
-* **結合先の名前**：結合先Controllerの名前を維持
+* **通常（controller）**：他シェイプ同様コントローラーを名前として使用
+* **結合先の名前**：結合先コントローラーの名前を維持
 * **新規**：結合時に任意の名前を入力
 
 作成タブと編集タブの命名設定を共有することで、
@@ -229,7 +229,7 @@ Shape結合後のController名は、用途に応じて選択できます。
 
 ## Controller Color
 
-Controller作成時に、任意のRGBカラーを設定できます。
+作成時に、任意のRGBカラーを設定できます。
 
 ![Controller Color](docs/images/controller_color.png)
 
@@ -249,12 +249,12 @@ Controllerを視覚的に整理できます。
 * Shape Combine
 * ZERO / OFFSET Group作成
 
-など、Controller作成後に必要になるセットアップ操作を行えます。
+など、コントローラー作成後に必要になるセットアップ操作を行えます。
 
-![Controller Setup Workflow](docs/images/controller_setup.gif)
+![Controller Setup Workflow](docs/gifs/controller_setup.gif)
 
 ```text
-Controller作成
+コントローラー作成
     ↓
 必要に応じてShape Combine
     ↓
@@ -273,8 +273,8 @@ Scale / Rotate / Move / Replace / Add / Copy / PasteなどのShape操作につ�
 
 ZERO / OFFSET Groupは、それぞれ単独で作成できます。
 
-ZERO Group作成時には、Controllerの現在のTransformを保持したまま
-値をZERO Group側へ移し、Controller自身のTransformを0に戻すことができます。
+ZERO Group作成時には、コントローラーの現在のTransformを保持したまま
+値をZERO Group側へ移し、コントローラー自身のTransformを0に戻すことができます。
 
 ```text
 Before
@@ -289,8 +289,7 @@ ZERO        ← Transform値を保持
    Translate / Rotate = 0
 ```
 
-これにより、Controllerの現在位置を初期姿勢として維持したまま、
-アニメーション用のTransformを0から扱える状態にできます。
+これにより、コントローラーの現在位置を初期姿勢として維持したまま、アニメーション用のTransformを0から扱える状態にできます。
 
 ZERO、OFFSETの順に作成した場合は、以下の階層になります。
 
@@ -308,7 +307,6 @@ ZERO_CTRL
 CTRL_OFFSET
 OFFSET_CTRL
 ```
-
 のようにprefix / suffixを変更できます。
 
 ![ZERO OFFSET Naming](docs/images/zero_offset_naming.png)
@@ -322,7 +320,8 @@ OFFSET_CTRL
 制作中に作成したController Shapeを、
 独自のプリセットとしてLibraryへ登録できます。
 
-![Custom Shape Library](docs/images/custom_library.gif)
+![Custom Shape Library](docs/gifs/custom_library.gif)
+
 
 登録したShapeはMayaシーンではなくJSONで管理しています。
 
@@ -332,13 +331,13 @@ Controller-Shape-Library/
     └── user_shapes.json
 ```
 
-そのため、一度作成したControllerを現在のMayaシーンだけで終わらせず、
+そのため、一度作成したコントローラーを現在のMayaシーンだけで終わらせず、
 **別のシーンや別のリグ制作でも再利用できます。**
 
 Libraryでは以下の操作に対応しています。
 
 * Shapeの保存 / 上書き
-* 保存済みShapeからControllerを作成
+* 保存済みShapeからコントローラーを作成
 * 登録内容の更新
 * Shapeの削除
 * カテゴリ変更
@@ -372,7 +371,7 @@ Shapeを視覚的に確認できるUIに加えて、
 
 を実装しました。
 
-![Search Category Workflow](docs/images/shape_search.gif)
+![Search Category Workflow](docs/gifs/shape_search.gif)
 
 Custom Shape Libraryについてもカテゴリを編集できるようにし、
 ユーザー自身が用途や使用頻度に合わせて整理できる構成にしています。
@@ -395,9 +394,7 @@ Custom Shape Libraryについてもカテゴリを編集できるようにし、
 を重視しました。
 
 Text ControllerとShape Combineを組み合わせることで、
-既存プリセットから用途に合わせたControllerを作成できます。
-
-![Custom Controller Creation](docs/images/custom_controller_creation.gif)
+既存プリセットから用途に合わせたコントローラーを作成できます。
 
 さらに完成したShapeをLibraryへ登録することで、
 
@@ -419,17 +416,17 @@ Libraryへ登録
 
 ### Problem
 
-作成したControllerをMayaシーン内だけで管理すると、
-別のリグで使用するときに元のシーンを開いたり、Controllerをコピーしたりする必要があります。
+作成したコントローラーをMayaシーン内だけで管理すると、
+別のリグで使用するときに元のシーンを開いたり、コントローラーをコピーしたりする必要があります。
 
 ### Solution
 
 Custom ShapeをJSONとして外部保存する方式にしました。
 
 ShapeデータをMayaシーンから分離することで、
-別のシーンでも同じControllerを生成できます。
+別のシーンでも同じコントローラーを生成できます。
 
-一度作ったControllerを使い捨てにせず、
+一度作ったコントローラーを使い捨てにせず、
 **制作を続けるほど自分のShape Libraryが蓄積されていく仕組み**を目指しています。
 
 ---
@@ -439,7 +436,7 @@ ShapeデータをMayaシーンから分離することで、
 Controller Shape Libraryは単体ツールとして使用するだけでなく、
 **他のリギングツールを構成する機能のひとつとして再利用できる設計**にしています。
 
-Controller生成やShape操作などの処理をUIから分離し、
+コントローラー生成やShape操作などの処理をUIから分離し、
 必要な機能を外部のツールから呼び出せる構成にしています。
 
 ## 実装例：Rig Controller Shape Tool
@@ -451,7 +448,7 @@ Controller Shape Libraryを組み込んで使用しています。
 
 ### 実際の呼び出し
 
-![Rig Controller Shape Tool Integration Demo](docs/images/rig_controller_shape_tool_integration.gif)
+![Rig Controller Shape Tool Integration Demo](docs/gifs/rig_controller_shape_tool_integration.gif)
 
 Rig Controller Shape Toolでは、
 
@@ -463,7 +460,7 @@ Rig Controller Shape Toolでは、
 * Copy / Paste
 * Shape編集
 
-など、Controllerの調整に関する機能をまとめています。
+など、コントローラーの調整に関する機能をまとめています。
 
 その中の **Shape Library機能としてController Shape Libraryを呼び出す**ことで、
 Controller Shapeの作成・選択機能を再実装せず利用できるようにしています。
@@ -623,7 +620,7 @@ PySide6
 ### 1. Controller作成のワークフローをまとめる
 
 Shape生成だけでなく、Combine・Snap・Color・Group作成までまとめ、
-Controller作成時に発生する反復操作を減らす。
+コントローラー作成時に発生する反復操作を減らす。
 
 ### 2. ユーザー自身が拡張できる
 
