@@ -32,6 +32,168 @@ class TextControllerEdit(QtWidgets.QPlainTextEdit):
         super().keyPressEvent(event)
 
 
+class FavoriteFontComboBox(QtWidgets.QComboBox):
+    """Font picker with an internal favorites tab and per-family stars."""
+
+    favoritesChanged = QtCore.Signal(list)
+
+    def __init__(self, favorites=None, parent=None):
+        super().__init__(parent)
+        self._favorites = list(favorites or [])
+        self._families = []
+        self._fonts_loaded = False
+        self._popup = None
+        self.refresh("Arial")
+
+    def refresh(self, current_family=None):
+        current_family = current_family or self.currentData() or "Arial"
+        if not self._fonts_loaded:
+            self.blockSignals(True)
+            self.clear()
+            self._add_family("Arial")
+            self.blockSignals(False)
+            return
+
+        families = self._families
+        family_lookup = {family.casefold(): family for family in families}
+        favorites = []
+        for family in self._favorites:
+            installed_family = family_lookup.get(str(family).casefold())
+            if installed_family and installed_family not in favorites:
+                favorites.append(installed_family)
+        self._favorites = sorted(favorites, key=str.casefold)
+
+        self.blockSignals(True)
+        self.clear()
+        selected_family = family_lookup.get(str(current_family).casefold())
+        if not selected_family:
+            selected_family = family_lookup.get("arial", "Arial")
+        self._add_family(selected_family)
+        self.blockSignals(False)
+
+    def _add_family(self, family):
+        self.addItem(family, family)
+        self.setItemData(self.count() - 1, QtGui.QFont(family), QtCore.Qt.FontRole)
+
+    def current_family(self):
+        return self.currentData() or "Arial"
+
+    def set_favorites(self, favorites):
+        self._favorites = list(favorites)
+        if self._fonts_loaded:
+            self.refresh()
+
+    def _ensure_fonts_loaded(self):
+        if self._fonts_loaded:
+            return
+        self._families = list(QtGui.QFontDatabase.families())
+        self._fonts_loaded = True
+        self.refresh()
+
+    def showPopup(self):
+        self._ensure_fonts_loaded()
+        if self._popup:
+            old_popup = self._popup
+            self._popup = None
+            old_popup.close()
+        popup = QtWidgets.QFrame(None, QtCore.Qt.Popup)
+        popup.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        popup.setMinimumSize(max(300, self.width()), 360)
+        layout = QtWidgets.QVBoxLayout(popup)
+        layout.setContentsMargins(2, 2, 2, 2)
+        search = QtWidgets.QLineEdit()
+        search.setPlaceholderText("フォントを検索…")
+        search.setClearButtonEnabled(True)
+        layout.addWidget(search)
+        tabs = QtWidgets.QTabWidget()
+        tabs.setDocumentMode(True)
+        layout.addWidget(tabs)
+        favorite_list = self._font_list(self._favorites, empty_message=True)
+        all_list = self._font_list(self._families)
+        tabs.addTab(favorite_list, "★ お気に入り")
+        tabs.addTab(all_list, "すべて")
+        if not self._favorites:
+            tabs.setCurrentIndex(1)
+        search.textChanged.connect(
+            lambda text: self._filter_font_lists(
+                (favorite_list, all_list), text))
+        position = self.mapToGlobal(QtCore.QPoint(0, self.height()))
+        screen = QtGui.QGuiApplication.screenAt(position)
+        if screen:
+            area = screen.availableGeometry()
+            position.setX(min(position.x(), area.right() - popup.width()))
+            position.setY(min(position.y(), area.bottom() - popup.height()))
+        popup.move(position)
+        self._popup = popup
+        popup.show()
+        search.setFocus()
+
+    def hidePopup(self):
+        if self._popup:
+            popup = self._popup
+            self._popup = None
+            popup.close()
+
+    def _font_list(self, families, empty_message=False):
+        font_list = QtWidgets.QListWidget()
+        font_list.setSpacing(0)
+        if empty_message and not families:
+            item = QtWidgets.QListWidgetItem(
+                "☆を押すと、ここにお気に入りが表示されます")
+            item.setFlags(QtCore.Qt.NoItemFlags)
+            font_list.addItem(item)
+            return font_list
+        for family in sorted(families, key=str.casefold):
+            item = QtWidgets.QListWidgetItem()
+            item.setData(QtCore.Qt.UserRole, family)
+            item.setSizeHint(QtCore.QSize(260, 25))
+            font_list.addItem(item)
+            row = QtWidgets.QWidget()
+            row_layout = QtWidgets.QHBoxLayout(row)
+            row_layout.setContentsMargins(6, 0, 3, 0)
+            label = QtWidgets.QLabel(family)
+            label.setFont(QtGui.QFont(family))
+            star = QtWidgets.QToolButton()
+            star.setAutoRaise(True)
+            star.setText("★" if family in self._favorites else "☆")
+            star.setToolTip("お気に入りから解除" if family in self._favorites
+                            else "お気に入りに追加")
+            star.clicked.connect(
+                lambda _checked=False, name=family: self._toggle_favorite(name))
+            row_layout.addWidget(label, 1)
+            row_layout.addWidget(star)
+            font_list.setItemWidget(item, row)
+        font_list.itemClicked.connect(self._choose_font)
+        return font_list
+
+    @staticmethod
+    def _filter_font_lists(font_lists, text):
+        query = str(text).strip().casefold()
+        for font_list in font_lists:
+            for index in range(font_list.count()):
+                item = font_list.item(index)
+                family = item.data(QtCore.Qt.UserRole)
+                item.setHidden(bool(family) and query not in family.casefold())
+
+    def _choose_font(self, item):
+        family = item.data(QtCore.Qt.UserRole)
+        if not family:
+            return
+        self.clear()
+        self._add_family(family)
+        self.hidePopup()
+
+    def _toggle_favorite(self, family):
+        if family in self._favorites:
+            self._favorites.remove(family)
+        else:
+            self._favorites.append(family)
+        self._favorites.sort(key=str.casefold)
+        self.favoritesChanged.emit(list(self._favorites))
+        self.hidePopup()
+        QtCore.QTimer.singleShot(0, self.showPopup)
+
+
 class ShapeSourceList(QtWidgets.QListWidget):
     def startDrag(self, supported_actions):
         item_ids = [item.data(QtCore.Qt.UserRole + 2)
@@ -187,7 +349,7 @@ class MainWindow(QtWidgets.QDialog):
             | QtCore.Qt.WindowSystemMenuHint
         )
         self.setObjectName(self.OBJECT_NAME)
-        self.setWindowTitle("Controller-Shape-Library 1.1")
+        self.setWindowTitle("Controller-Shape-Library 1.1.1 (combine fix)")
         self.setMinimumSize(480, 400)
         self.resize(560, 460)
         self.setSizeGripEnabled(True)
@@ -212,6 +374,10 @@ class MainWindow(QtWidgets.QDialog):
         self._color_targets = []
         self._color_undo_open = False
         self._color_selection_job = None
+        self._settings = QtCore.QSettings(
+            "ControllerShapeLibrary", "ControllerShapeLibrary")
+        self._favorite_fonts = list(
+            self._settings.value("favoriteFonts", [], type=list))
         self._build_ui()
 
     def _build_ui(self):
@@ -269,6 +435,36 @@ class MainWindow(QtWidgets.QDialog):
         text_layout.addWidget(self.text_edit, 1)
         text_layout.addWidget(text_button)
         layout.addWidget(text_row)
+
+        font_header = QtWidgets.QHBoxLayout()
+        font_header.setContentsMargins(0, 0, 0, 0)
+        self.font_toggle = QtWidgets.QToolButton()
+        self.font_toggle.setText("フォント")
+        self.font_toggle.setCheckable(True)
+        self.font_toggle.setAutoRaise(True)
+        self.font_toggle.setArrowType(QtCore.Qt.RightArrow)
+        self.font_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        self.font_toggle.setStyleSheet("QToolButton { color:#999999; }")
+        self.font_toggle.setToolTip("フォント設定を表示")
+        self.font_toggle.toggled.connect(self._toggle_font_options)
+        font_header.addSpacing(28)
+        font_header.addWidget(self.font_toggle)
+        font_header.addStretch(1)
+        layout.addLayout(font_header)
+
+        self.font_options = QtWidgets.QWidget()
+        font_row = QtWidgets.QHBoxLayout(self.font_options)
+        font_row.setContentsMargins(72, 0, 0, 0)
+        font_row.setSpacing(4)
+        self.font_combo = FavoriteFontComboBox(self._favorite_fonts)
+        self.font_combo.setToolTip(
+            "文字コントローラーに使用するフォント")
+        self.font_combo.setMaximumWidth(240)
+        self.font_combo.favoritesChanged.connect(self._save_favorite_fonts)
+        font_row.addWidget(self.font_combo)
+        font_row.addStretch(1)
+        self.font_options.setVisible(False)
+        layout.addWidget(self.font_options)
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.setPlaceholderText("シェイプ名を検索…")
@@ -613,10 +809,22 @@ class MainWindow(QtWidgets.QDialog):
                 name=self.name_edit.text().strip() or "controller",
                 size=self.size_spin.value(),
                 color=self._creation_color,
+                font_family=self.font_combo.current_family(),
             )
             cmds.select(controller, replace=True)
             return "{} を作成しました".format(controller)
         self._run(create)
+
+    def _toggle_font_options(self, visible):
+        self.font_options.setVisible(visible)
+        self.font_toggle.setArrowType(
+            QtCore.Qt.DownArrow if visible else QtCore.Qt.RightArrow)
+        self.font_toggle.setToolTip(
+            "フォント設定を隠す" if visible else "フォント設定を表示")
+
+    def _save_favorite_fonts(self, favorites):
+        self._favorite_fonts = list(favorites)
+        self._settings.setValue("favoriteFonts", self._favorite_fonts)
         QtCore.QTimer.singleShot(0, self._restore_viewport_focus)
 
     def _combine_selected(self):

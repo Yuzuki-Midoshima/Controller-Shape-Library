@@ -3,38 +3,66 @@
 from __future__ import annotations
 
 from maya import cmds
-from maya.api import OpenMaya as om
-
 from . import shape_utils
 
-
-def _shape_in_target_space(shape, target_inverse):
-    values = cmds.xform(shape + ".cv[*]", query=True, worldSpace=True, translation=True)
-    points = []
-    for index in range(0, len(values), 3):
-        point = om.MPoint(*values[index:index + 3]) * target_inverse
-        points.append((point.x, point.y, point.z))
-    return {"degree": cmds.getAttr(shape + ".degree"), "points": points}
+_POSITION_TOLERANCE = 1.0e-5
 
 
-def _override_state(shape):
-    """Capture the per-shape drawing override used for controller colors."""
-    rgb = cmds.getAttr(shape + ".overrideColorRGB")
-    if isinstance(rgb, list):
-        rgb = rgb[0]
-    return {
-        "enabled": cmds.getAttr(shape + ".overrideEnabled"),
-        "rgb_mode": cmds.getAttr(shape + ".overrideRGBColors"),
-        "index": cmds.getAttr(shape + ".overrideColor"),
-        "rgb": tuple(rgb),
-    }
+def _world_cv_positions(shape):
+    """Return CV positions before a shape is moved below another transform."""
+    values = cmds.xform(
+        shape + ".cv[*]", query=True, worldSpace=True, translation=True)
+    return [values[index:index + 3] for index in range(0, len(values), 3)]
 
 
-def _apply_override(shape, state):
-    cmds.setAttr(shape + ".overrideEnabled", state["enabled"])
-    cmds.setAttr(shape + ".overrideRGBColors", state["rgb_mode"])
-    cmds.setAttr(shape + ".overrideColor", state["index"])
-    cmds.setAttr(shape + ".overrideColorRGB", *state["rgb"])
+def _restore_world_cv_positions(shape, positions):
+    """Bake captured world positions into a reparented curve shape."""
+    for index, position in enumerate(positions):
+        cmds.xform(
+            "{}.cv[{}]".format(shape, index), worldSpace=True,
+            translation=position)
+
+
+def _positions_match(actual, expected):
+    if len(actual) != len(expected):
+        return False
+    return all(
+        abs(actual_axis - expected_axis) <= _POSITION_TOLERANCE
+        for actual_point, expected_point in zip(actual, expected)
+        for actual_axis, expected_axis in zip(actual_point, expected_point)
+    )
+
+
+def _copy_shapes(source, target):
+    """Copy all source shapes to target without rebuilding their topology."""
+    source_shapes = shape_utils.curve_shapes(source)
+    world_positions = [_world_cv_positions(shape) for shape in source_shapes]
+    duplicate = cmds.duplicate(
+        source, returnRootsOnly=True, inputConnections=False)[0]
+    copied_shapes = shape_utils.curve_shapes(duplicate)
+    if len(copied_shapes) != len(source_shapes):
+        cmds.delete(duplicate)
+        raise RuntimeError("Failed to duplicate all controller shapes")
+    records = list(zip(copied_shapes, world_positions))
+    moved_shapes = []
+    try:
+        for shape, positions in records:
+            moved = cmds.parent(
+                shape, target, shape=True, relative=True) or []
+            if not moved:
+                raise RuntimeError("Failed to transfer a controller shape")
+            moved_shape = cmds.ls(moved[0], long=True)[0]
+            _restore_world_cv_positions(moved_shape, positions)
+            actual = _world_cv_positions(moved_shape)
+            if not _positions_match(actual, positions):
+                raise RuntimeError(
+                    "Failed to preserve controller shape position: {}".format(
+                        source))
+            moved_shapes.append(moved_shape)
+    finally:
+        if cmds.objExists(duplicate):
+            cmds.delete(duplicate)
+    return moved_shapes
 
 
 def combine(controllers, target=None, delete_sources=True):
@@ -46,34 +74,13 @@ def combine(controllers, target=None, delete_sources=True):
     if target not in nodes:
         raise ValueError("target must be one of the supplied controllers")
     shape_utils.require_editable(target)
-    target_matrix = om.MMatrix(cmds.xform(target, query=True, worldSpace=True, matrix=True))
-    target_inverse = target_matrix.inverse()
     for source in nodes:
         if source == target:
             continue
         shape_utils.require_editable(source)
-        source_shapes = shape_utils.curve_shapes(source)
-        records = [(_shape_in_target_space(shape, target_inverse),
-                    _override_state(shape)) for shape in source_shapes]
-        if not records:
+        if not shape_utils.curve_shapes(source):
             continue
-        # Build and transfer one curve at a time. A compound temporary transform
-        # caused Maya to invalidate a shape name while its siblings were being
-        # reparented (for example ``combinedShapeTemp_Shape``).
-        for curve, color in records:
-            temporary = cmds.curve(
-                degree=int(curve["degree"]), point=curve["points"])
-            temporary_shape = cmds.listRelatives(
-                temporary, shapes=True, noIntermediate=True,
-                fullPath=True)[0]
-            moved = cmds.parent(
-                temporary_shape, target, shape=True, relative=True) or []
-            if cmds.objExists(temporary):
-                cmds.delete(temporary)
-            if not moved:
-                raise RuntimeError("Failed to transfer a controller shape")
-            moved_shape = cmds.ls(moved[0], long=True)[0]
-            _apply_override(moved_shape, color)
+        _copy_shapes(source, target)
         if delete_sources and cmds.objExists(source):
             cmds.delete(source)
     shape_utils.rename_shapes(target)

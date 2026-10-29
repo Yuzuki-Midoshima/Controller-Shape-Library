@@ -86,6 +86,84 @@ class ControllerShapeMayaTests(unittest.TestCase):
         self.assertTrue(all(cmds.nodeType(shape) == "nurbsCurve"
                             for shape in shapes))
 
+    def test_combine_preserves_world_shape_with_transformed_controllers(self):
+        source = api.create_controller("square", "source_CTRL")
+        target = api.create_controller("circle", "target_CTRL")
+        cmds.setAttr(source + ".translate", 3.0, -2.0, 5.0)
+        cmds.setAttr(source + ".rotate", 23.0, -41.0, 17.0)
+        cmds.setAttr(source + ".scale", 2.0, 0.5, 1.25)
+        cmds.setAttr(target + ".translate", -4.0, 6.0, 1.0)
+        cmds.setAttr(target + ".rotate", -12.0, 37.0, 29.0)
+        cmds.setAttr(target + ".scale", 0.75, 1.5, 2.5)
+        source_shape = cmds.listRelatives(
+            source, shapes=True, fullPath=True)[0]
+        before = cmds.xform(
+            source_shape + ".cv[*]", query=True, worldSpace=True,
+            translation=True)
+
+        result = api.combine_controllers([source, target], target=target)
+
+        added_shape = cmds.listRelatives(
+            result, shapes=True, fullPath=True)[-1]
+        after = cmds.xform(
+            added_shape + ".cv[*]", query=True, worldSpace=True,
+            translation=True)
+        self.assertEqual(len(after), len(before))
+        for actual, expected in zip(after, before):
+            self.assertAlmostEqual(actual, expected, places=5)
+
+    def test_combine_uses_evaluated_source_shape_positions(self):
+        driver = cmds.createNode("transform", name="driver")
+        source = api.create_controller("square", "driven_CTRL")
+        target = api.create_controller("circle", "target_CTRL")
+        cmds.setAttr(driver + ".translate", 7.0, 3.0, -4.0)
+        cmds.setAttr(driver + ".scale", 2.0, 0.75, 1.5)
+        cmds.connectAttr(driver + ".translate", source + ".translate")
+        cmds.connectAttr(driver + ".scale", source + ".scale")
+        source_shape = cmds.listRelatives(
+            source, shapes=True, fullPath=True)[0]
+        before = cmds.xform(
+            source_shape + ".cv[*]", query=True, worldSpace=True,
+            translation=True)
+
+        result = api.combine_controllers([source, target], target=target)
+
+        added_shape = cmds.listRelatives(
+            result, shapes=True, fullPath=True)[-1]
+        after = cmds.xform(
+            added_shape + ".cv[*]", query=True, worldSpace=True,
+            translation=True)
+        self.assertEqual(len(after), len(before))
+        for actual, expected in zip(after, before):
+            self.assertAlmostEqual(actual, expected, places=5)
+
+    def test_combine_keeps_two_scaled_copies_of_the_same_shape(self):
+        outer = api.create_controller("triangle", "outer_CTRL")
+        inner = api.create_controller("triangle", "inner_CTRL")
+        cmds.setAttr(outer + ".scale", 2.0, 2.0, 2.0)
+        cmds.setAttr(inner + ".scale", 0.75, 0.75, 0.75)
+        before = []
+        for controller in (outer, inner):
+            shape = cmds.listRelatives(
+                controller, shapes=True, fullPath=True)[0]
+            before.append(cmds.xform(
+                shape + ".cv[*]", query=True, worldSpace=True,
+                translation=True))
+
+        result = api.combine_controllers([inner, outer], target=outer)
+
+        shapes = cmds.listRelatives(result, shapes=True, fullPath=True) or []
+        self.assertEqual(len(shapes), 2)
+        after = [cmds.xform(
+            shape + ".cv[*]", query=True, worldSpace=True,
+            translation=True) for shape in shapes]
+        for expected in before:
+            self.assertTrue(any(
+                len(actual) == len(expected) and all(
+                    abs(a - e) < 1.0e-5
+                    for a, e in zip(actual, expected))
+                for actual in after))
+
     def test_custom_zero_suffix(self):
         target = api.create_controller("circle", "hand_CTRL")
         self.assertEqual(api.create_zero_group(target, "ZRO"), "hand_ZRO")

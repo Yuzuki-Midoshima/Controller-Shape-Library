@@ -7,4 +7,4 @@ for scripting, or call :func:`controller_shape_library.ui.main_window.show` expl
 from . import api
 
 __all__ = ["api"]
-__version__ = "1.1.0"
+__version__ = "1.1.1"
