@@ -2,11 +2,42 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
 from maya import cmds
 
 CLIPBOARD_OPTION = "controllerShapeToolkitClipboard"
+
+
+def normalized_data(data):
+    """Return library curve data centered at the origin and sized to one unit.
+
+    User-authored controls often have transforms frozen after being positioned
+    or scaled.  In that case their CV values contain scene-sized offsets even
+    though the visible controller looked correct when it was registered.  A
+    library shape is a reusable template, so store/use it in a predictable
+    local space: bounding-box center at zero and largest half-extent at one.
+    """
+    result = copy.deepcopy(data)
+    points = [point for curve in result.get("curves", [])
+              for point in curve.get("points", [])]
+    if not points:
+        return result
+
+    minimum = [min(float(point[axis]) for point in points) for axis in range(3)]
+    maximum = [max(float(point[axis]) for point in points) for axis in range(3)]
+    center = [(minimum[axis] + maximum[axis]) * 0.5 for axis in range(3)]
+    radius = max((maximum[axis] - minimum[axis]) * 0.5 for axis in range(3))
+    if radius <= 1.0e-12:
+        radius = 1.0
+
+    for curve in result["curves"]:
+        curve["points"] = [
+            [(float(point[axis]) - center[axis]) / radius for axis in range(3)]
+            for point in curve.get("points", [])
+        ]
+    return result
 
 
 def curve_shapes(node, full_path=True):

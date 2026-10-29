@@ -173,8 +173,8 @@ def save_to_library(source, name, path=None, category="Panel", replace_name=None
                     allow_overwrite=True):
     """Add or replace one named shape in libraries/user_shapes.json."""
     from .core.library import save_shape
-    from .core.shape_utils import serialize
-    data = serialize(source)
+    from .core.shape_utils import normalized_data, serialize
+    data = normalized_data(serialize(source))
     data["category"] = category
     data["label"] = name
     # Text controllers carry a preview-only horizontal correction. It must
@@ -195,15 +195,17 @@ def create_from_library(name, controller_name="controller", size=1.0, color=None
     """Create a controller from the shared JSON library."""
     from .core.creator import create_from_data
     from .core.library import load
+    from .core.shape_utils import normalized_data
     shapes = load(path)
     if name not in shapes:
         raise ValueError("Library shape does not exist: {}".format(name))
     with _undo_chunk("Create Library Controller"):
         return create_from_data(
-            shapes[name], name=controller_name, size=size, color=color,
-            # Library CVs are serialized directly from Maya. This is also the
-            # correct behavior for records written by older releases; their
-            # preview compatibility flag must never affect created geometry.
+            normalized_data(shapes[name]), name=controller_name, size=size,
+            color=color,
+            # Library CVs use Maya-space orientation. Normalization above also
+            # repairs older records containing frozen scene offsets/scales;
+            # preview compatibility flags must not affect created geometry.
             apply_orientation=False,
             preview_flip_x=bool(shapes[name].get("preview_flip_x", False)
                                 or shapes[name].get("preview_flip_z", False)))

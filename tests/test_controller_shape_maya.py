@@ -200,13 +200,43 @@ class ControllerShapeMayaTests(unittest.TestCase):
             # preserve the selected controller's orientation exactly.
             recreated = api.create_from_library(
                 "HIGH", "HIGH_COPY_CTRL", path=path)
-            original_points = cmds.xform(
-                cmds.listRelatives(controller, shapes=True, fullPath=True)[0]
-                + ".cv[*]", query=True, objectSpace=True, translation=True)
+            expected = shape_utils.normalized_data(
+                shape_utils.serialize(controller))["curves"][0]["points"]
+            original_points = [value for point in expected for value in point]
             recreated_points = cmds.xform(
                 cmds.listRelatives(recreated, shapes=True, fullPath=True)[0]
                 + ".cv[*]", query=True, objectSpace=True, translation=True)
-            self.assertEqual(original_points, recreated_points)
+            self.assertEqual(len(original_points), len(recreated_points))
+            for original, copied in zip(original_points, recreated_points):
+                self.assertAlmostEqual(original, copied)
+
+    def test_library_shapes_are_centered_and_normalized(self):
+        import tempfile
+        from pathlib import Path
+
+        controller = cmds.curve(
+            degree=1,
+            point=[(10.0, 99.0, -4.0), (30.0, 99.0, -4.0),
+                   (30.0, 99.0, 6.0), (10.0, 99.0, 6.0)])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "shapes.json"
+            api.save_to_library(controller, "offset", path)
+            recreated = api.create_from_library("offset", path=path)
+            shape = cmds.listRelatives(
+                recreated, shapes=True, fullPath=True)[0]
+            values = cmds.xform(
+                shape + ".cv[*]", query=True, objectSpace=True,
+                translation=True)
+            points = [values[index:index + 3]
+                      for index in range(0, len(values), 3)]
+            for axis in range(3):
+                low = min(point[axis] for point in points)
+                high = max(point[axis] for point in points)
+                self.assertAlmostEqual((low + high) * 0.5, 0.0)
+            self.assertAlmostEqual(
+                max(max(point[axis] for point in points)
+                    - min(point[axis] for point in points)
+                    for axis in range(3)), 2.0)
 
 
 if __name__ == "__main__":
